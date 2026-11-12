@@ -1,0 +1,38 @@
+{
+  "compiled_step_4_per_chip": {
+    "bd_allreduce_ms": 14.75,
+    "bd_bwd_ms": 190.56,
+    "bd_clip_ms": 7.58,
+    "bd_fwd_ms": 103.37,
+    "bd_metrics_ms": 0.76,
+    "bd_opt_ms": 44.29,
+    "bd_pad_h2d_ms": 2.96
+  },
+  "explicit_attn_grouped_muon_16_per_chip_v5p32": {
+    "bd_allreduce_ms": 89.09,
+    "bd_bwd_ms": 445.58,
+    "bd_clip_ms": 9.21,
+    "bd_fwd_ms": 303.12,
+    "bd_metrics_ms": 2.34,
+    "bd_opt_ms": 19.12,
+    "bd_pad_h2d_ms": 10.62
+  },
+  "pallas_attention_16_per_chip_mb4x4": {
+    "bd_allreduce_ms": 46.97,
+    "bd_bwd_ms": 357.76,
+    "bd_clip_ms": 8.76,
+    "bd_fwd_ms": 195.72,
+    "bd_metrics_ms": 2.49,
+    "bd_opt_ms": 19.09,
+    "bd_pad_h2d_ms": 12.14
+  },
+  "best_pallas_rope_packed_16_per_chip_mb8x2": {
+    "bd_allreduce_ms": 61.45,
+    "bd_bwd_ms": 254.9,
+    "bd_clip_ms": 9.01,
+    "bd_fwd_ms": 126.03,
+    "bd_metrics_ms": 1.37,
+    "bd_opt_ms": 18.82,
+    "bd_pad_h2d_ms": 9.87
+  }
+}

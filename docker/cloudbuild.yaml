@@ -1,0 +1,14 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+  - 'build'
+  - '-t'
+  - 'us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/torchtpu/tabicl-torchtpu:v0.2.0-tabicl2.2.0'
+  - '-f'
+  - 'Dockerfile'
+  - '.'
+images:
+- 'us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/torchtpu/tabicl-torchtpu:v0.2.0-tabicl2.2.0'
+options:
+  machineType: 'E2_HIGHCPU_8'
+timeout: '1800s'

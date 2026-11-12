@@ -1,0 +1,108 @@
+# TabICLv2 pretraining on a TPU v5p-16 slice (2x2x4 = 4 hosts x 4 chips), Indexed Job + headless Service.
+# /models is a GCSFuse-backed PVC that holds results/tpu_patch.diff (applied at startup) and receives logs,
+# metrics, and checkpoints.
+# The training script is mounted from a ConfigMap built from scripts/train_pretrain_curriculum.py:
+#   kubectl create configmap tabiclv2-v5p-pretrain-script --from-file=scripts/train_pretrain_curriculum.py
+apiVersion: v1
+kind: Service
+metadata:
+  name: tabiclv2-v5p16-svc
+  namespace: default
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: tabiclv2-v5p16-pretrain
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tabiclv2-v5p16-pretrain
+  namespace: default
+spec:
+  completions: 4
+  parallelism: 4
+  completionMode: Indexed
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: tabiclv2-v5p16-pretrain
+      annotations:
+        gke-gcsfuse/volumes: "true"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      serviceAccountName: default
+      subdomain: tabiclv2-v5p16-svc
+      terminationGracePeriodSeconds: 5
+      restartPolicy: OnFailure
+      imagePullSecrets:
+      - name: YOUR_REGISTRY_PULL_SECRET
+      nodeSelector:
+        cloud.google.com/gke-nodepool: YOUR_TPU_V5P_NODEPOOL
+        cloud.google.com/gke-tpu-accelerator: tpu-v5p-slice
+        cloud.google.com/gke-tpu-topology: 2x2x4
+      tolerations:
+      - key: "google.com/tpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "cloud.google.com/gke-spot"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: trainer
+        image: us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/torchtpu/tabicl-torchtpu:v0.2.0-tabicl2.2.0
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-lc"]
+        args:
+        - |
+          set -o pipefail
+          mkdir -p /models/tabiclv2-v5p-pretrain/v5p-16 /tmp/torchtpu_cache
+          LOG_FILE="/models/tabiclv2-v5p-pretrain/v5p-16/node_${JOB_COMPLETION_INDEX}.log"
+          {
+            echo "[Startup $(date -u +%FT%TZ)] Host=$(hostname) Index=${JOB_COMPLETION_INDEX}"
+            if ! git -C /workspace/tabicl diff --quiet; then
+              echo "[Startup] /workspace/tabicl already patched"
+            else
+              git -C /workspace/tabicl apply /models/tabiclv2-v5p-pretrain/tpu_patch.diff
+              echo "[Startup] Applied tpu_patch.diff cleanly"
+            fi
+            python3 -c "import networkx, matplotlib, transformers, xgboost, wandb" 2>/dev/null || \
+              pip install -q --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
+                networkx matplotlib transformers xgboost-cpu wandb
+            export PYTHONPATH="/workspace/tabicl/src:${PYTHONPATH:-}"
+            python3 -u /scripts/train_pretrain_curriculum.py \
+              --nnodes=4 \
+              --nproc-per-node=4 \
+              --master-addr=tabiclv2-v5p16-pretrain-0.tabiclv2-v5p16-svc.default.svc.cluster.local \
+              --slice-name=v5p-16-4n-2x2x4 \
+              --output-dir=/models/tabiclv2-v5p-pretrain/v5p-16
+          } 2>&1 | tee -a "${LOG_FILE}"
+        env:
+        - name: PJRT_DEVICE
+          value: "TPU"
+        - name: TORCH_TPU_CACHE_DIR
+          value: "/tmp/torchtpu_cache"
+        resources:
+          requests:
+            google.com/tpu: "4"
+          limits:
+            google.com/tpu: "4"
+        volumeMounts:
+        - name: models-gcs
+          mountPath: /models
+        - name: pretrain-script
+          mountPath: /scripts
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 128Gi
+      - name: models-gcs
+        persistentVolumeClaim:
+          claimName: YOUR_GCSFUSE_MODELS_PVC
+      - name: pretrain-script
+        configMap:
+          name: tabiclv2-v5p-pretrain-script
